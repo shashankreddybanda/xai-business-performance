@@ -13,7 +13,7 @@ training data only:
 |---|---|
 | **L1 Data analytics** | drops constant ratios and near-duplicates (\|Spearman ρ\| > 0.95) |
 | **L2 AI prediction** | class-weighted gradient boosting (LightGBM) scores failure risk |
-| **L3 Explainability** | **consensus SHAP**: averages normalised SHAP shares over the outer model and the inner cross-validation models, then keeps the top-k drivers as a compact model (single-model SHAP is reported as an ablation) |
+| **L3 Explainability** | **consensus SHAP**: averages normalized SHAP shares over the outer model and the inner cross-validation models, then keeps the top-k drivers as a compact model (single-model SHAP is reported as an ablation) |
 | **L4 Decision** | learns the threshold that minimises `c·FN + FP` from inner out-of-fold scores (exact O(n log n) search) |
 
 ![XBP framework](results/fig1_framework.png)

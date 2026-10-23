@@ -150,7 +150,7 @@ def shap_ranking(fitted: Pipeline, X: pd.DataFrame) -> pd.Series:
 
 
 def consensus_ranking(models: list[tuple[Pipeline, pd.DataFrame]]) -> pd.Series:
-    """Consensus SHAP ranking: average each model's normalised mean |SHAP| share.
+    """Consensus SHAP ranking: average each model's normalized mean |SHAP| share.
 
     Motivation: one model's SHAP ranking can split credit arbitrarily between
     correlated ratios. Averaging shares over models fitted on different resamples
@@ -171,7 +171,7 @@ def jaccard_stability(sets: list[set[str]]) -> float:
 
 # ---------------------------------------------------------------- L4: decision layer
 def cost_optimal_threshold(y: np.ndarray, p: np.ndarray, ratio: float) -> float:
-    """Threshold t minimising ratio*FN + FP when firms with p >= t are flagged.
+    """Threshold t minimizing ratio*FN + FP when firms with p >= t are flagged.
 
     Exact search over every distinct score (O(n log n)); ratio = cost(FN) / cost(FP).
     """
@@ -353,7 +353,7 @@ def figure1(path: Path) -> None:
         ("L1  Data analytics", "95 financial ratios;\ndrop constant and\nnear-duplicate ratios\n(|Spearman ρ| > 0.95)"),
         ("L2  AI prediction", "class-weighted\ngradient boosting\n(LightGBM) scores\nfailure risk"),
         ("L3  Explainability", "consensus SHAP over\nouter + inner models\nranks the drivers;\ntop-k → compact model"),
-        ("L4  Decision", "threshold minimising\nc·FN + FP on inner\nout-of-fold scores;\nflag firms for review"),
+        ("L4  Decision", "threshold minimizing\nc·FN + FP on inner\nout-of-fold scores;\nflag firms for review"),
     ]
     w, gap, x0, y0, h = 2.12, 0.43, 0.09, 1.0, 2.35
     for i, (title, body) in enumerate(layers):
