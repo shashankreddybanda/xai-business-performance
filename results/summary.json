@@ -17,50 +17,130 @@
         "default": 93.4,
         "cost_aware": 94.9,
         "reduction_pct": -1.7,
-        "wilcoxon_p": 0.6377
+        "mean_diff": -1.6,
+        "ci95": [
+          -12.0,
+          8.8
+        ],
+        "p": 0.752
       },
       "10:1": {
         "default": 164.2,
         "cost_aware": 148.0,
         "reduction_pct": 9.9,
-        "wilcoxon_p": 0.0215
+        "mean_diff": 16.3,
+        "ci95": [
+          -13.0,
+          45.5
+        ],
+        "p": 0.2527
       },
       "20:1": {
         "default": 306.0,
         "cost_aware": 222.1,
         "reduction_pct": 27.4,
-        "wilcoxon_p": 0.0001
+        "mean_diff": 83.9,
+        "ci95": [
+          34.8,
+          133.0
+        ],
+        "p": 0.0025
       }
     },
-    "consensus_vs_single_cost": {
+    "consensus_vs_single": {
       "5:1": {
-        "single": 101.5,
-        "consensus": 101.3,
-        "wilcoxon_p": 0.5134
+        "mean_diff": -0.2,
+        "ci95": [
+          -11.4,
+          11.0
+        ],
+        "p": 0.9706
       },
       "10:1": {
-        "single": 159.9,
-        "consensus": 158.3,
-        "wilcoxon_p": 0.8201
+        "mean_diff": -1.6,
+        "ci95": [
+          -21.9,
+          18.8
+        ],
+        "p": 0.8714
       },
       "20:1": {
-        "single": 231.0,
-        "consensus": 246.4,
-        "wilcoxon_p": 0.0413
+        "mean_diff": 15.4,
+        "ci95": [
+          -15.5,
+          46.3
+        ],
+        "p": 0.3031
+      }
+    },
+    "threshold_vs_smote": {
+      "5:1": {
+        "mean_diff": -7.5,
+        "ci95": [
+          -21.3,
+          6.3
+        ],
+        "p": 0.2647
+      },
+      "10:1": {
+        "mean_diff": -8.8,
+        "ci95": [
+          -32.0,
+          14.4
+        ],
+        "p": 0.4302
+      },
+      "20:1": {
+        "mean_diff": -1.5,
+        "ci95": [
+          -27.3,
+          24.3
+        ],
+        "p": 0.9048
+      }
+    },
+    "threshold_vs_cost_sensitive_training": {
+      "5:1": {
+        "mean_diff": -9.9,
+        "ci95": [
+          -26.6,
+          6.8
+        ],
+        "p": 0.2228
+      },
+      "10:1": {
+        "mean_diff": -31.2,
+        "ci95": [
+          -68.9,
+          6.6
+        ],
+        "p": 0.0982
+      },
+      "20:1": {
+        "mean_diff": -103.0,
+        "ci95": [
+          -158.9,
+          -47.1
+        ],
+        "p": 0.0014
       }
     }
   },
+  "specificity_range_table1": [
+    0.916,
+    0.943
+  ],
   "driver_selection_frequency": {
     "Quick Ratio": 1.0,
-    "Interest-bearing debt interest rate": 1.0,
     "Total debt/Total net worth": 1.0,
     "Retained Earnings to Total Assets": 1.0,
+    "Interest-bearing debt interest rate": 1.0,
     "ROA(C) before interest and depreciation before interest": 0.933,
     "Persistent EPS in the Last Four Seasons": 0.867,
     "Borrowing dependency": 0.8,
     "Non-industry income and expenditure/revenue": 0.533,
-    "Cash Flow to Sales": 0.4,
     "Cash Turnover Rate": 0.4,
+    "Cash Flow to Sales": 0.4,
     "Allocation rate per person": 0.4,
     "Accounts Receivable Turnover": 0.333,
     "Revenue per person": 0.267,
@@ -71,8 +151,8 @@
     "Continuous Net Profit Growth Rate": 0.067,
     "Cash/Current Liability": 0.067,
     "Equity to Long-term Liability": 0.067,
-    "Research and development expense rate": 0.067,
     "Net Value Per Share (B)": 0.067,
+    "Research and development expense rate": 0.067,
     "Current Liability to Assets": 0.067,
     "ROA(A) before interest and % after tax": 0.067
   },
@@ -128,5 +208,5 @@
       "higher_value_raises_risk": false
     }
   ],
-  "runtime_min": 9.8
+  "runtime_min": 10.7
 }

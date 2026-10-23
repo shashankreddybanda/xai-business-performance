@@ -5,7 +5,7 @@ Reproduces every table and figure of the short communication
 "An Explainable Artificial Intelligence Framework for Data Analytics-Driven
 Business Performance Prediction" (submitted to Knowledge-Based Systems).
 
-    python xbp.py            # full study: 5-fold x 3-repeat nested CV (~15 min, 2 CPUs)
+    python xbp.py            # full study: 5-fold x 3-repeat nested CV (~11 min, 2 CPUs)
     python xbp.py --quick    # smoke test: 3-fold x 1 repeat (~2 min)
 
 The four layers of the framework (Fig. 1):
@@ -16,6 +16,8 @@ The four layers of the framework (Fig. 1):
 
 Every layer is fitted on the outer training fold only, so no information from
 the test fold reaches feature filtering, driver selection or threshold choice.
+L4 is compared with SMOTE resampling and cost-sensitive training, and per-fold
+costs are compared with the Nadeau-Bengio corrected resampled t-test.
 """
 from __future__ import annotations
 
@@ -37,7 +39,9 @@ import shap
 from lightgbm import LGBMClassifier
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
-from scipy.stats import wilcoxon
+from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import make_pipeline as make_imb_pipeline
+from scipy.stats import t as student_t
 from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -250,6 +254,17 @@ def run(args) -> pd.DataFrame:
             if name == "LightGBM":                       # L3 input: training-fold models only
                 lgbm_models = [(model, Xtr), *inner_models]
 
+        # decision strategies on the same filtered ratios (Table 2)
+        smote = make_imb_pipeline(RedundancyFilter(), SMOTE(random_state=args.seed),
+                                  lightgbm(1.0, args.seed, args.jobs))   # resampling instead of weights
+        model, thr, _ = fit_with_threshold(smote, Xtr, ytr, ratios, inner)
+        record("SMOTE + LightGBM", model, thr, len(model[0].columns_))
+        for r in ratios:  # predict-and-optimize: failures weighted by c, Bayes-optimal threshold 0.5
+            cs = make_pipeline(RedundancyFilter(), lightgbm(r, args.seed, args.jobs)).fit(Xtr, ytr)
+            rows.append({"fold": fold, "model": "Cost-sensitive LightGBM", "ratio": r,
+                         "features": len(cs[0].columns_), "threshold": "default 0.5",
+                         **evaluate(yte, cs.predict_proba(Xte)[:, 1], 0.5, r)})
+
         rankings = {"consensus": consensus_ranking(lgbm_models),
                     "single": shap_ranking(*lgbm_models[0])}   # ablation: one model's SHAP
         for source, k in [("consensus", k) for k in args.k] + [("single", args.k_main)]:
@@ -282,65 +297,92 @@ def holm(pvalues: dict[str, float]) -> dict[str, float]:
     return adjusted
 
 
-def table1(folds: pd.DataFrame, ratio: float) -> pd.DataFrame:
+def corrected_ttest(diff: np.ndarray, test_over_train: float) -> tuple[float, float, float, float]:
+    """Nadeau-Bengio corrected resampled t-test for repeated k-fold cross-validation.
+
+    Overlapping training sets make fold scores correlated, so a plain paired test is
+    too liberal; the correction inflates the variance by (1/J + n_test/n_train).
+    Returns the mean difference, its 95% confidence interval and the two-sided p-value.
+    """
+    J, mean = len(diff), float(np.mean(diff))
+    se = float(np.sqrt((1 / J + test_over_train) * np.var(diff, ddof=1)))
+    if se == 0:
+        return mean, mean, mean, 1.0
+    half = float(student_t.ppf(0.975, J - 1)) * se
+    return mean, mean - half, mean + half, float(2 * student_t.sf(abs(mean / se), J - 1))
+
+
+def fold_cost(folds: pd.DataFrame, model: str, thr: str, r: float) -> np.ndarray:
+    g = folds[(folds.model == model) & (folds.threshold == thr) & (folds.ratio == r)]
+    return g.sort_values("fold").cost.to_numpy()
+
+
+def table1(folds: pd.DataFrame, ratio: float, n_folds: int) -> pd.DataFrame:
     """Benchmark comparison at the main cost ratio, all models using cost-aware thresholds."""
     d = folds[(folds.ratio == ratio) & (folds.threshold == "cost-aware")]
     names = ["Logistic regression", "Multilayer perceptron", "Random forest",
              "XGBoost", "LightGBM", PROPOSED]
-    ours = d[d.model == PROPOSED].sort_values("fold")
-    raw = {n: wilcoxon(ours.cost.to_numpy(), d[d.model == n].sort_values("fold").cost.to_numpy()).pvalue
-           for n in names[:-1]}
-    p_adj = holm(raw)
+    ours = fold_cost(folds, PROPOSED, "cost-aware", ratio)
+    tests = {n: corrected_ttest(ours - fold_cost(folds, n, "cost-aware", ratio), 1 / (n_folds - 1))
+             for n in names[:-1]}
+    p_adj = holm({n: t[3] for n, t in tests.items()})
     out = []
     for n in names:
         g = d[d.model == n]
-        out.append({"Model": n, "Features": int(round(g.features.mean())),
+        diff = "—" if n == PROPOSED else "{:+.1f} [{:+.1f}, {:+.1f}]".format(*tests[n][:3])
+        out.append({"Model": n, "Ratios": int(round(g.features.mean())),
                     "ROC-AUC": mean_sd(g.roc_auc), "PR-AUC": mean_sd(g.pr_auc),
-                    "Recall": mean_sd(g.recall), "Specificity": mean_sd(g.specificity),
-                    f"Cost per 1,000 firms ({ratio:g}:1)": mean_sd(g.cost, 1),
-                    "Holm p (cost)": "—" if n == PROPOSED else f"{p_adj[n]:.3f}"})
+                    "Recall": mean_sd(g.recall), "Cost per 1,000 firms": mean_sd(g.cost, 1),
+                    "XBP − model [95% CI]": diff,
+                    "Holm p": "—" if n == PROPOSED else f"{p_adj[n]:.3f}"})
     return pd.DataFrame(out)
 
 
-def table2(folds: pd.DataFrame, k_values, k_main: int, stability: dict) -> pd.DataFrame:
-    """Ablation of the XBP layers and sensitivity of business cost to the cost ratio."""
+def table2(folds: pd.DataFrame, k_values, k_main: int, stability: dict, ratio: float) -> pd.DataFrame:
+    """Decision strategies, ablation of the XBP layers, and sensitivity to the cost ratio."""
     name = lambda k: PROPOSED if k == k_main else f"XBP top-{k}"
-    variants = [("LightGBM", "default 0.5", "L1+L2: LightGBM, default 0.5 threshold", None),
-                ("LightGBM", "cost-aware", "+ L4: cost-aware threshold", None)]
+    variants = [("LightGBM", "default 0.5", "L1 + L2, default 0.5 threshold", None),
+                ("LightGBM", "cost-aware", "+ L4 cost-aware threshold", None),
+                ("SMOTE + LightGBM", "cost-aware", "SMOTE + cost-aware threshold", None),
+                ("Cost-sensitive LightGBM", "default 0.5", "Cost-sensitive training (weight = c)", None)]
     for k in sorted(k_values, reverse=True):
         if k == k_main:
             variants.append((f"Single-SHAP top-{k}", "cost-aware",
-                             f"+ L3: single-model SHAP, top-{k}", f"single-top-{k}"))
-        variants.append((name(k), "cost-aware", f"+ L3: consensus SHAP, top-{k}"
+                             f"+ L3 single-model SHAP, top {k}", f"single-top-{k}"))
+        variants.append((name(k), "cost-aware", f"+ L3 consensus SHAP, top {k}"
                          + (" (XBP)" if k == k_main else ""), f"consensus-top-{k}"))
     out = []
     for model, thr, label, key in variants:
         g = folds[(folds.model == model) & (folds.threshold == thr)]
-        row = {"Variant": label, "Features": int(round(g.features.mean())),
-               "PR-AUC": mean_sd(g[g.ratio == g.ratio.iloc[0]].pr_auc),
+        row = {"Variant": label, "Ratios": int(round(g.features.mean())),
+               "PR-AUC": mean_sd(g[g.ratio == ratio].pr_auc),
                "Driver stability (Jaccard)": f"{stability[key]:.2f}" if key else "—"}
         for r in sorted(folds.ratio.unique()):
-            row[f"Cost {r:g}:1"] = mean_sd(g[g.ratio == r].cost, 1)
+            row[f"Cost, c = {r:g}"] = mean_sd(g[g.ratio == r].cost, 1)
         out.append(row)
     return pd.DataFrame(out)
 
 
-def paired_tests(folds: pd.DataFrame, k_main: int) -> dict:
-    """Wilcoxon tests behind the claims in the text (paired by outer fold)."""
-    def cost(model, thr, r):
-        g = folds[(folds.model == model) & (folds.threshold == thr) & (folds.ratio == r)]
-        return g.sort_values("fold").cost.to_numpy()
-    out = {"threshold_effect_lightgbm": {}, "consensus_vs_single_cost": {}}
+def paired_tests(folds: pd.DataFrame, k_main: int, n_folds: int) -> dict:
+    """Corrected resampled t-tests behind the claims in the text (paired by outer fold)."""
+    frac = 1 / (n_folds - 1)
+    def test(a, b):  # mean of a - b
+        m, lo, hi, p = corrected_ttest(a - b, frac)
+        return {"mean_diff": round(m, 1), "ci95": [round(lo, 1), round(hi, 1)], "p": round(p, 4)}
+    keys = ("threshold_effect_lightgbm", "consensus_vs_single", "threshold_vs_smote",
+            "threshold_vs_cost_sensitive_training")
+    out = {k: {} for k in keys}
     for r in sorted(folds.ratio.unique()):
-        a, b = cost("LightGBM", "default 0.5", r), cost("LightGBM", "cost-aware", r)
-        out["threshold_effect_lightgbm"][f"{r:g}:1"] = {
-            "default": round(a.mean(), 1), "cost_aware": round(b.mean(), 1),
-            "reduction_pct": round(100 * (1 - b.mean() / a.mean()), 1),
-            "wilcoxon_p": round(float(wilcoxon(a, b).pvalue), 4)}
-        s, c = cost(f"Single-SHAP top-{k_main}", "cost-aware", r), cost(PROPOSED, "cost-aware", r)
-        out["consensus_vs_single_cost"][f"{r:g}:1"] = {
-            "single": round(s.mean(), 1), "consensus": round(c.mean(), 1),
-            "wilcoxon_p": round(float(wilcoxon(s, c).pvalue), 4)}
+        c = f"{r:g}:1"
+        default, aware = fold_cost(folds, "LightGBM", "default 0.5", r), fold_cost(folds, "LightGBM", "cost-aware", r)
+        out["threshold_effect_lightgbm"][c] = {
+            "default": round(default.mean(), 1), "cost_aware": round(aware.mean(), 1),
+            "reduction_pct": round(100 * (1 - aware.mean() / default.mean()), 1), **test(default, aware)}
+        out["consensus_vs_single"][c] = test(fold_cost(folds, PROPOSED, "cost-aware", r),
+                                             fold_cost(folds, f"Single-SHAP top-{k_main}", "cost-aware", r))
+        out["threshold_vs_smote"][c] = test(aware, fold_cost(folds, "SMOTE + LightGBM", "cost-aware", r))
+        out["threshold_vs_cost_sensitive_training"][c] = test(
+            aware, fold_cost(folds, "Cost-sensitive LightGBM", "default 0.5", r))
     return out
 
 
@@ -372,7 +414,7 @@ def figure1(path: Path) -> None:
     ax.text(5, 0.36, "Nested cross-validation: every layer is fitted on the outer training fold only",
             ha="center", fontsize=7.5, color=MUTED, style="italic")
     ax.text(5, 0.04, "Output: a review decision for each firm, with its ranked, explained drivers", ha="center", fontsize=7.5, color=INK)
-    fig.savefig(path.with_suffix(".pdf"), bbox_inches="tight")
+    fig.savefig(path.with_suffix(".pdf"), bbox_inches="tight", metadata={"CreationDate": None})
     fig.savefig(path.with_suffix(".png"), dpi=600, bbox_inches="tight")
     plt.close(fig)
 
@@ -390,11 +432,12 @@ def figure2(X: pd.DataFrame, y: np.ndarray, args, path: Path) -> pd.DataFrame:
     sv = sv[1] if isinstance(sv, list) else sv
     cmap = LinearSegmentedColormap.from_list("bo", [BLUE, NEUTRAL, ORANGE])
     plt.figure()
-    shap.summary_plot(sv, Z, max_display=len(top), show=False, cmap=cmap, plot_size=(7.2, 4.4))
+    shap.summary_plot(sv, Z, max_display=len(top), show=False, cmap=cmap, plot_size=(7.2, 4.4),
+                      rng=np.random.default_rng(args.seed))   # seeds the beeswarm's dot jitter
     fig = plt.gcf()
     fig.axes[0].set_xlabel("SHAP value (impact on log-odds of failure)", fontsize=9)
     fig.axes[0].tick_params(labelsize=8.5)
-    fig.savefig(path.with_suffix(".pdf"), bbox_inches="tight")
+    fig.savefig(path.with_suffix(".pdf"), bbox_inches="tight", metadata={"CreationDate": None})
     fig.savefig(path.with_suffix(".png"), dpi=600, bbox_inches="tight")
     plt.close(fig)
     direction = [np.corrcoef(Z[c].rank(), sv[:, i])[0, 1] for i, c in enumerate(top)]
@@ -424,8 +467,8 @@ def main() -> None:
 
     folds, stability, frequency = run(args)
     folds.to_csv(args.out / "fold_metrics.csv", index=False)
-    t1 = table1(folds, args.cost_ratio)
-    t2 = table2(folds, args.k, args.k_main, stability)
+    t1 = table1(folds, args.cost_ratio, args.folds)
+    t2 = table2(folds, args.k, args.k_main, stability, args.cost_ratio)
     t1.to_csv(args.out / "table1_benchmark.csv", index=False)
     t2.to_csv(args.out / "table2_ablation.csv", index=False)
 
@@ -436,7 +479,11 @@ def main() -> None:
         "firms": int(len(y)), "failures": int(y.sum()), "ratios_raw": int(X.shape[1]),
         "cv": f"{args.folds}x{args.repeats}", "cost_ratio": args.cost_ratio, "k_main": args.k_main,
         "driver_stability_jaccard": {k: round(v, 3) for k, v in stability.items()},
-        "paired_tests": paired_tests(folds, args.k_main),
+        "paired_tests": paired_tests(folds, args.k_main, args.folds),
+        "specificity_range_table1": [round(float(v), 3) for v in folds[(folds.ratio == args.cost_ratio)
+            & (folds.threshold == "cost-aware")].groupby("model").specificity.mean().loc[
+            ["Logistic regression", "Multilayer perceptron", "Random forest", "XGBoost", "LightGBM",
+             PROPOSED]].agg(["min", "max"])],
         "driver_selection_frequency": frequency.round(3).to_dict(),
         "final_drivers": drivers.round(4).to_dict(orient="records"),
         "runtime_min": round((time.time() - t0) / 60, 1),
