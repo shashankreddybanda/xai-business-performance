@@ -152,9 +152,11 @@ def shap_ranking(fitted: Pipeline, X: pd.DataFrame) -> pd.Series:
 def consensus_ranking(models: list[tuple[Pipeline, pd.DataFrame]]) -> pd.Series:
     """Consensus SHAP ranking: average each model's normalised mean |SHAP| share.
 
-    Single-model SHAP rankings are unstable when financial ratios are correlated
-    (credit is split arbitrarily between near-duplicates). Averaging the shares of
-    several models fitted on different resamples gives a steadier driver set.
+    Motivation: one model's SHAP ranking can split credit arbitrarily between
+    correlated ratios. Averaging shares over models fitted on different resamples
+    tests whether that model-level noise drives driver instability. (In the paper's
+    study it does not: stability equals that of single-model SHAP, so instability
+    across folds is sample-driven; the single-model ranking is kept as an ablation.)
     Features a model did not keep count as zero for that model.
     """
     shares = [r / r.sum() for r in (shap_ranking(m, X) for m, X in models)]
@@ -357,10 +359,10 @@ def figure1(path: Path) -> None:
     for i, (title, body) in enumerate(layers):
         x = x0 + i * (w + gap)
         ax.add_patch(FancyBboxPatch((x, y0), w, h, boxstyle="round,pad=0.02,rounding_size=0.1",
-                                    fc=NEUTRAL, ec=ORANGE if i == 2 else BLUE, lw=1.4))
+                                    fc=NEUTRAL, ec=BLUE, lw=1.4))
         ax.text(x + w / 2, y0 + h - 0.32, title, ha="center", va="center", fontsize=8.6,
                 fontweight="bold", color=INK)
-        ax.text(x + w / 2, y0 + h / 2 - 0.22, body, ha="center", va="center", fontsize=7.3,
+        ax.text(x + w / 2, y0 + h / 2 - 0.22, body, ha="center", va="center", fontsize=7.0,
                 color=MUTED, linespacing=1.4)
         if i < 3:
             ax.add_patch(FancyArrowPatch((x + w + 0.03, y0 + h / 2), (x + w + gap - 0.03, y0 + h / 2),
@@ -369,8 +371,7 @@ def figure1(path: Path) -> None:
                 arrowprops=dict(arrowstyle="<->", color=MUTED, lw=0.9))
     ax.text(5, 0.36, "Nested cross-validation: every layer is fitted on the outer training fold only",
             ha="center", fontsize=7.5, color=MUTED, style="italic")
-    ax.text(5, 0.04, "Orange border: the new consensus-SHAP layer.  Output: a review decision "
-            "with its ranked drivers", ha="center", fontsize=7.5, color=INK)
+    ax.text(5, 0.04, "Output: a review decision for each firm, with its ranked, explained drivers", ha="center", fontsize=7.5, color=INK)
     fig.savefig(path.with_suffix(".pdf"), bbox_inches="tight")
     fig.savefig(path.with_suffix(".png"), dpi=600, bbox_inches="tight")
     plt.close(fig)

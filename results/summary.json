@@ -1,0 +1,132 @@
+{
+  "firms": 6819,
+  "failures": 220,
+  "ratios_raw": 95,
+  "cv": "5x3",
+  "cost_ratio": 10.0,
+  "k_main": 10,
+  "driver_stability_jaccard": {
+    "consensus-top-5": 0.664,
+    "consensus-top-10": 0.563,
+    "consensus-top-20": 0.575,
+    "single-top-10": 0.563
+  },
+  "paired_tests": {
+    "threshold_effect_lightgbm": {
+      "5:1": {
+        "default": 93.4,
+        "cost_aware": 94.9,
+        "reduction_pct": -1.7,
+        "wilcoxon_p": 0.6377
+      },
+      "10:1": {
+        "default": 164.2,
+        "cost_aware": 148.0,
+        "reduction_pct": 9.9,
+        "wilcoxon_p": 0.0215
+      },
+      "20:1": {
+        "default": 306.0,
+        "cost_aware": 222.1,
+        "reduction_pct": 27.4,
+        "wilcoxon_p": 0.0001
+      }
+    },
+    "consensus_vs_single_cost": {
+      "5:1": {
+        "single": 101.5,
+        "consensus": 101.3,
+        "wilcoxon_p": 0.5134
+      },
+      "10:1": {
+        "single": 159.9,
+        "consensus": 158.3,
+        "wilcoxon_p": 0.8201
+      },
+      "20:1": {
+        "single": 231.0,
+        "consensus": 246.4,
+        "wilcoxon_p": 0.0413
+      }
+    }
+  },
+  "driver_selection_frequency": {
+    "Quick Ratio": 1.0,
+    "Interest-bearing debt interest rate": 1.0,
+    "Total debt/Total net worth": 1.0,
+    "Retained Earnings to Total Assets": 1.0,
+    "ROA(C) before interest and depreciation before interest": 0.933,
+    "Persistent EPS in the Last Four Seasons": 0.867,
+    "Borrowing dependency": 0.8,
+    "Non-industry income and expenditure/revenue": 0.533,
+    "Cash Flow to Sales": 0.4,
+    "Cash Turnover Rate": 0.4,
+    "Allocation rate per person": 0.4,
+    "Accounts Receivable Turnover": 0.333,
+    "Revenue per person": 0.267,
+    "Total Asset Growth Rate": 0.2,
+    "Cash flow rate": 0.133,
+    "Operating profit per person": 0.133,
+    "Inventory/Current Liability": 0.133,
+    "Continuous Net Profit Growth Rate": 0.067,
+    "Cash/Current Liability": 0.067,
+    "Equity to Long-term Liability": 0.067,
+    "Research and development expense rate": 0.067,
+    "Net Value Per Share (B)": 0.067,
+    "Current Liability to Assets": 0.067,
+    "ROA(A) before interest and % after tax": 0.067
+  },
+  "final_drivers": [
+    {
+      "driver": "Retained Earnings to Total Assets",
+      "mean_abs_shap": 0.459,
+      "higher_value_raises_risk": false
+    },
+    {
+      "driver": "Total debt/Total net worth",
+      "mean_abs_shap": 0.3779,
+      "higher_value_raises_risk": true
+    },
+    {
+      "driver": "Quick Ratio",
+      "mean_abs_shap": 0.4727,
+      "higher_value_raises_risk": false
+    },
+    {
+      "driver": "Interest-bearing debt interest rate",
+      "mean_abs_shap": 0.4762,
+      "higher_value_raises_risk": true
+    },
+    {
+      "driver": "ROA(C) before interest and depreciation before interest",
+      "mean_abs_shap": 0.4091,
+      "higher_value_raises_risk": false
+    },
+    {
+      "driver": "Persistent EPS in the Last Four Seasons",
+      "mean_abs_shap": 0.602,
+      "higher_value_raises_risk": false
+    },
+    {
+      "driver": "Borrowing dependency",
+      "mean_abs_shap": 0.5064,
+      "higher_value_raises_risk": true
+    },
+    {
+      "driver": "Accounts Receivable Turnover",
+      "mean_abs_shap": 0.4324,
+      "higher_value_raises_risk": false
+    },
+    {
+      "driver": "Cash/Current Liability",
+      "mean_abs_shap": 0.2121,
+      "higher_value_raises_risk": true
+    },
+    {
+      "driver": "Cash Turnover Rate",
+      "mean_abs_shap": 0.3464,
+      "higher_value_raises_risk": false
+    }
+  ],
+  "runtime_min": 9.8
+}
