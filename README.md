@@ -16,8 +16,6 @@ training data only:
 | **L3 Explainability** | **consensus SHAP**: averages normalized SHAP shares over the outer model and the inner cross-validation models, then keeps the top-k drivers as a compact model (single-model SHAP is reported as an ablation) |
 | **L4 Decision** | learns the threshold that minimizes `c·FN + FP` from inner out-of-fold scores (exact O(n log n) search); compared with SMOTE and cost-sensitive training |
 
-![XBP framework](results/fig1_framework.png)
-
 ## Reproduce
 
 ```bash
@@ -73,6 +71,11 @@ failure by c and flags at 0.5; driver stability = mean pairwise Jaccard similari
 | + L3 consensus SHAP, top 10 (XBP) | 10 | 0.441 ± 0.068 | 0.56 | 101.3 ± 13.9 | 158.3 ± 26.0 | 246.4 ± 47.8 |
 | + L3 consensus SHAP, top 5 | 5 | 0.407 ± 0.046 | 0.66 | 106.1 ± 10.5 | 165.3 ± 23.4 | 255.2 ± 31.7 |
 
+![Cost effects](results/fig1_cost_effects.png)
+
+*Fig. 1 — (a) mean cost per 1,000 firms by decision strategy; (b) paired cost differences with
+corrected 95% CIs (filled = interval excludes zero).*
+
 Key findings (corrected resampled t-tests, `summary.json` → `paired_tests`):
 
 - **The decision threshold matters more than the learner.** Learning the threshold from
@@ -96,7 +99,7 @@ Key findings (corrected resampled t-tests, `summary.json` → `paired_tests`):
 xbp.py                 the whole method and experiment (data checks, 4 layers, nested CV, tables, figures)
 data/bankruptcy.csv    UCI Taiwanese Bankruptcy Prediction dataset, unchanged
 results/               table1_benchmark.csv, table2_ablation.csv, fold_metrics.csv,
-                       summary.json, fig1_framework.{pdf,png}, fig2_shap_drivers.{pdf,png}
+                       summary.json, fig1_cost_effects.{pdf,png}, fig2_shap_drivers.{pdf,png}
 ```
 
 ## Data

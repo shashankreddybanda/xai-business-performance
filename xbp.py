@@ -8,7 +8,7 @@ Business Performance Prediction" (submitted to Knowledge-Based Systems).
     python xbp.py            # full study: 5-fold x 3-repeat nested CV (~11 min, 2 CPUs)
     python xbp.py --quick    # smoke test: 3-fold x 1 repeat (~2 min)
 
-The four layers of the framework (Fig. 1):
+The four layers of the framework:
   L1  Data analytics   constant-feature removal and Spearman redundancy filtering
   L2  AI prediction    class-weighted gradient boosting (LightGBM)
   L3  Explainability   SHAP ranks the drivers; the top-k drivers form a compact model
@@ -38,7 +38,6 @@ import pandas as pd
 import shap
 from lightgbm import LGBMClassifier
 from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import make_pipeline as make_imb_pipeline
 from scipy.stats import t as student_t
@@ -387,33 +386,80 @@ def paired_tests(folds: pd.DataFrame, k_main: int, n_folds: int) -> dict:
 
 
 # ---------------------------------------------------------------- figures
-def figure1(path: Path) -> None:
-    """Fig. 1: the four-layer XBP framework."""
-    fig, ax = plt.subplots(figsize=(7.2, 2.5))
-    ax.set(xlim=(0, 10), ylim=(0, 3.5)); ax.axis("off")
-    layers = [
-        ("L1  Data analytics", "95 financial ratios;\ndrop constant and\nnear-duplicate ratios\n(|Spearman ρ| > 0.95)"),
-        ("L2  AI prediction", "class-weighted\ngradient boosting\n(LightGBM) scores\nfailure risk"),
-        ("L3  Explainability", "consensus SHAP over\nouter + inner models\nranks the drivers;\ntop-k → compact model"),
-        ("L4  Decision", "threshold minimizing\nc·FN + FP on inner\nout-of-fold scores;\nflag firms for review"),
-    ]
-    w, gap, x0, y0, h = 2.12, 0.43, 0.09, 1.0, 2.35
-    for i, (title, body) in enumerate(layers):
-        x = x0 + i * (w + gap)
-        ax.add_patch(FancyBboxPatch((x, y0), w, h, boxstyle="round,pad=0.02,rounding_size=0.1",
-                                    fc=NEUTRAL, ec=BLUE, lw=1.4))
-        ax.text(x + w / 2, y0 + h - 0.32, title, ha="center", va="center", fontsize=8.6,
-                fontweight="bold", color=INK)
-        ax.text(x + w / 2, y0 + h / 2 - 0.22, body, ha="center", va="center", fontsize=7.0,
-                color=MUTED, linespacing=1.4)
-        if i < 3:
-            ax.add_patch(FancyArrowPatch((x + w + 0.03, y0 + h / 2), (x + w + gap - 0.03, y0 + h / 2),
-                                         arrowstyle="-|>", mutation_scale=10, color=INK, lw=1.1))
-    ax.annotate("", xy=(x0, 0.68), xytext=(x0 + 4 * w + 3 * gap, 0.68),
-                arrowprops=dict(arrowstyle="<->", color=MUTED, lw=0.9))
-    ax.text(5, 0.36, "Nested cross-validation: every layer is fitted on the outer training fold only",
-            ha="center", fontsize=7.5, color=MUTED, style="italic")
-    ax.text(5, 0.04, "Output: a review decision for each firm, with its ranked, explained drivers", ha="center", fontsize=7.5, color=INK)
+def figure1(folds: pd.DataFrame, args, path: Path) -> None:
+    """Fig. 1: (a) business cost of each decision strategy across cost ratios;
+    (b) corrected 95% confidence intervals of the paired cost differences."""
+    ratios = sorted(folds.ratio.unique())
+    fig = plt.figure(figsize=(7.2, 3.5))
+    a = fig.add_axes([0.07, 0.40, 0.26, 0.52])
+    b = fig.add_axes([0.635, 0.12, 0.235, 0.80])
+
+    # (a) mean cost per 1,000 firms; color, marker and dash all encode the strategy
+    series = [("Cost-sensitive LightGBM", "default 0.5", "Cost-sensitive training", ORANGE, "D", "-"),
+              ("LightGBM", "default 0.5", "Default 0.5 threshold", "#e87ba4", "s", (0, (3, 1.5))),
+              ("SMOTE + LightGBM", "cost-aware", "SMOTE + cost-aware threshold", "#199e70", "^", "-"),
+              ("LightGBM", "cost-aware", "Cost-aware threshold (L4)", BLUE, "o", "-")]
+    for model, thr, label, color, marker, dash in series:
+        cost = [fold_cost(folds, model, thr, r).mean() for r in ratios]
+        a.plot(range(len(ratios)), cost, color=color, marker=marker, ms=5, lw=1.6, ls=dash,
+               label=label, mec="white", mew=0.8, zorder=3)
+    a.set_xticks(range(len(ratios)), [f"{r:g}:1" for r in ratios])
+    a.set_xlim(-0.25, len(ratios) - 0.75)
+    a.set_xlabel("Cost ratio c", fontsize=8)
+    a.set_ylabel("Business cost per 1,000 firms", fontsize=8)
+    a.set_title("(a) Cost by decision strategy", fontsize=8.5, loc="left", color=INK)
+    a.legend(fontsize=7.5, frameon=False, loc="upper left", bbox_to_anchor=(-0.22, -0.2),
+             handlelength=2.6, labelcolor=INK)
+
+    # (b) mean paired difference A - B with its corrected 95% CI (negative = A cheaper)
+    c_main, c_high, frac = args.cost_ratio, max(ratios), 1 / (args.folds - 1)
+    aware = {r: fold_cost(folds, "LightGBM", "cost-aware", r) for r in ratios}
+    default = {r: fold_cost(folds, "LightGBM", "default 0.5", r) for r in ratios}
+    xbp_cost = fold_cost(folds, PROPOSED, "cost-aware", c_main)
+    groups = [(f"XBP (10 ratios) − 65-ratio model, c = {c_main:g}",
+               [(n, xbp_cost - fold_cost(folds, n, "cost-aware", c_main)) for n in
+                ["Logistic regression", "Multilayer perceptron", "Random forest", "XGBoost", "LightGBM"]]),
+              ("Decision strategies and SHAP consensus",
+               [(f"Threshold − default, c = {c_main:g}", aware[c_main] - default[c_main]),
+                (f"Threshold − default, c = {c_high:g}", aware[c_high] - default[c_high]),
+                (f"Threshold − cost-sensitive, c = {c_high:g}",
+                 aware[c_high] - fold_cost(folds, "Cost-sensitive LightGBM", "default 0.5", c_high)),
+                (f"Threshold − SMOTE, c = {c_high:g}",
+                 aware[c_high] - fold_cost(folds, "SMOTE + LightGBM", "cost-aware", c_high)),
+                (f"Consensus − single SHAP, c = {c_high:g}",
+                 fold_cost(folds, PROPOSED, "cost-aware", c_high)
+                 - fold_cost(folds, f"Single-SHAP top-{args.k_main}", "cost-aware", c_high))])]
+    y = 0
+    for header, rows in groups:
+        b.text(-0.03, y, header, transform=b.get_yaxis_transform(), ha="right", va="center",
+               fontsize=7.5, color=MUTED, style="italic")
+        y -= 1
+        for label, diff in rows:
+            m, lo, hi, _ = corrected_ttest(diff, frac)
+            sig = hi < 0 or lo > 0
+            color = BLUE if sig else MUTED
+            b.plot([lo, hi], [y, y], color=color, lw=1.6, solid_capstyle="round", zorder=2)
+            b.plot(m, y, "o", ms=5.5, color=color if sig else "white", mec=color, mew=1.4, zorder=3)
+            b.text(-0.03, y, label, transform=b.get_yaxis_transform(), ha="right", va="center",
+                   fontsize=7.5, color=INK)
+            b.text(1.03, y, f"{m:+.1f} [{lo:+.1f}, {hi:+.1f}]".replace("-", "−"),
+                   transform=b.get_yaxis_transform(), ha="left", va="center", fontsize=7, color=MUTED)
+            y -= 1
+        y -= 0.4
+    b.axvline(0, color=INK, lw=0.8, zorder=1)
+    b.set_yticks([]); b.set_ylim(y + 0.6, 0.6)
+    b.set_xlabel("Cost difference per 1,000 firms (negative = first is cheaper)", fontsize=8)
+    b.set_title("(b) Paired differences with 95% CI", fontsize=8.5, loc="left", color=INK, x=-0.95)
+    b.spines["left"].set_visible(False)
+
+    for ax in (a, b):
+        ax.tick_params(labelsize=8, colors=MUTED)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        for side in ("left", "bottom"):
+            ax.spines[side].set_color(MUTED)
+        ax.grid(axis="y" if ax is a else "x", color=NEUTRAL, lw=0.8, zorder=0)
+        ax.set_axisbelow(True)
     fig.savefig(path.with_suffix(".pdf"), bbox_inches="tight", metadata={"CreationDate": None})
     fig.savefig(path.with_suffix(".png"), dpi=600, bbox_inches="tight")
     plt.close(fig)
@@ -473,7 +519,7 @@ def main() -> None:
     t2.to_csv(args.out / "table2_ablation.csv", index=False)
 
     X, y = load_data(args.data)
-    figure1(args.out / "fig1_framework")
+    figure1(folds, args, args.out / "fig1_cost_effects")
     drivers = figure2(X, y, args, args.out / "fig2_shap_drivers")
     summary = {
         "firms": int(len(y)), "failures": int(y.sum()), "ratios_raw": int(X.shape[1]),
